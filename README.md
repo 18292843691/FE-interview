@@ -1,7 +1,7 @@
 ---
-title: 面试准备
+title: 面试
 date: 2017-07-29 16:09:22
-tags: 面试准备
+tags: 面试
 categories: 前端
 ---
 
@@ -273,7 +273,7 @@ obj.mathod( fn , 2);
 ## HTTP response codes
 - [HTTP response codes](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Status)
 - [HTTP状态码](https://zh.wikipedia.org/wiki/HTTP%E7%8A%B6%E6%80%81%E7%A0%81)
-
+- [你所知道的3xx状态码](https://aotu.io/notes/2016/01/28/3xx-of-http-status/)
 ## HTTP 2.0 
 - HTTP2.0性能增强的核心：二进制分帧
 - HTTP2.0 首部压缩
@@ -969,3 +969,411 @@ body,html {
 - [lint-code](http://www.lintcode.com/zh-cn/problem/)
 
 > 知识整理及总结多来于网络及他人博客，由于时间原因，不能每一个知识点都完整的整理出来，因此附带了参考/学习链接。也等于一个知识点的梳理。
+
+# 简答题：
+## settimeout 与 setInterval的区别， 及对他们的内存的分析
+### 区别
+1. setTimeout是在一段时间后调用指定函数（仅一次）
+2. setInterval是每隔一段时间调用指定函数（N次）
+```
+function run(){
+    // 其他代码
+    setTimeout(function(){
+        run();
+    }, 10000);
+}
+run();
+```
+以上面的代码来说, 虽然设置的是10s执行一次, 但是实际时间却是需要// 其他代码的执行时间来确定
+即setTimeout的间隔时间是, // setTimeout 的间隔时间 === 最小时间是(10s+)
+
+
+```
+setInterval(function(){
+    run();
+}, 10000);
+```
+而setInterval, 不会有上面的问题, 但是如果run()的执行时间, 操作大于10s, 那么甚至可能跳过任务;
+
+[setInterval 和 setTimeout 会产生内存溢出](http://www.pjhome.net/article/Javascript/822.html)
+[JavaScript setInterval()方法是否导致内存泄漏？](https://gxnotes.com/article/65338.html)
+
+## 关于内存泄漏
+### 内存
+程序的运行需要内存。只要程序提出要求，操作系统或者运行时（runtime）就必须供给内存。
+对于持续运行的服务进程（daemon），必须及时释放不再用到的内存。否则，内存占用越来越高，轻则影响系统性能，重则导致进程崩溃。
+不再用到的内存，没有及时释放，就叫做内存泄漏（memory leak）。
+（比如 C 语言）必须手动释放内存，程序员负责内存管理。
+```
+char * buffer;
+buffer = (char*) malloc(42);
+
+//...
+
+free(buffer)    //手动释放内存
+```
+
+> 上面是 C 语言代码，malloc方法用来申请内存，使用完毕之后，必须自己用free方法释放内存。
+这很麻烦，所以大多数语言提供自动内存管理，减轻程序员的负担，这被称为"垃圾回收机制"（garbage collector）。
+
+### 垃圾回收机制
+怎么知道哪些内存不再需要呢？常用的方法是 '引用计数', 语言的引擎有一张 '引用表', 保存了内存里面所有的资源(通常是各种值)的引用次数，当一个值的引用次数为 0 时，表示这个值用不到了，因此可将其释放。
+
+但是如果一个值不再用到了，引用次数却不为 0 ，垃圾回收机制却无法释放这块内存，从而导致内存泄漏。
+```
+const arr = [1, 2, 3, 4];
+console.log(arr);
+```
+
+打印完 arr 之后, arr 便用不到了，引用次数为 1, 但是它还会继续占用内存。
+```
+const arr = [1, 2, 3, 4];
+console.log(arr);
+arr = null;
+```
+
+arr 重置为 null，就解除了对 [1, 2, 3, 4] 的引用，引用次数变成了 0 ，内存就可以释放了。
+
+### JavaScript 内存管理
+JavaScript 是一种垃圾回收语言。垃圾回收语言通过周期性地检查先前分配的内存是否可达，帮助开发者管理内存。换言之，垃圾回收语言减轻了“内存仍可用”及“内存仍可达”的问题。两者的区别是微妙而重要的：仅有开发者了解哪些内存在将来仍会使用，而不可达内存通过算法确定和标记，适时被操作系统回收。
+
+### JavaScript 内存泄漏
+
+垃圾回收语言的内存泄漏主因是不需要的引用。理解它之前，还需了解垃圾回收语言如何辨别内存的可达与不可达。
+
+**Mark-and-sweep**
+1. 大部分垃圾回收语言用的算法称之为 Mark-and-sweep 。算法由以下几步组成：
+垃圾回收器创建了一个“roots”列表。Roots 通常是代码中全局变量的引用。JavaScript 中，“window” 对象是一个全局变量，被当作 root 。window 对象总是存在，因此垃圾回收器可以检查它和它的所有子对象是否存在（即不是垃圾）；
+2. 所有的 roots 被检查和标记为激活（即不是垃圾）。所有的子对象也被递归地检查。从 root 开始的所有对象如果是可达的，它就不被当作垃圾。
+3. 所有未被标记的内存会被当做垃圾，收集器现在可以释放内存，归还给操作系统了。
+
+现代的垃圾回收器改良了算法，但是本质是相同的：可达内存被标记，其余的被当作垃圾回收。
+
+不需要的引用是指开发者明知内存引用不再需要，却由于某些原因，它仍被留在激活的 root 树中。在 JavaScript 中，不需要的引用是保留在代码中的变量，它不再需要，却指向一块本该被释放的内存。有些人认为这是开发者的错误。
+
+为了理解 JavaScript 中最常见的内存泄漏，我们需要了解哪种方式的引用容易被遗忘。
+
+#### 常见 JavaScript 内存泄漏
+##### 意外的全局变量
+JavaScript 处理未定义变量的方式比较宽松：未定义的变量会在全局对象创建一个新变量。在浏览器中，全局对象是 window 。
+```
+function foo(arg) {
+    bar = "this is a hidden global variable";
+}
+```
+真相是：
+```
+function foo(arg) {
+    window.bar = "this is an explicit global variable";
+}
+```
+
+函数 foo 内部忘记使用 var ，意外创建了一个全局变量。此例泄漏了一个简单的字符串，无伤大雅，但是有更糟的情况。
+
+另一种意外的全局变量可能由 this 创建：
+```
+function foo() {
+    this.variable = "potential accidental global";
+}
+// Foo 调用自己，this 指向了全局对象（window）
+// 而不是 undefined
+foo();
+```
+> 在 JavaScript 文件头部加上 'use strict'，可以避免此类错误发生。启用严格模式解析 JavaScript ，避免意外的全局变量。
+
+全局变量注意事项:
+尽管我们讨论了一些意外的全局变量，但是仍有一些明确的全局变量产生的垃圾。它们被定义为不可回收（除非定义为空或重新分配）。尤其当全局变量用于临时存储和处理大量信息时，需要多加小心。如果必须使用全局变量存储大量数据时，确保用完以后把它设置为 null 或者重新定义。与全局变量相关的增加内存消耗的一个主因是缓存。缓存数据是为了重用，缓存必须有一个大小上限才有用。高内存消耗导致缓存突破上限，因为缓存内容无法被回收。
+
+##### 被遗忘的计时器或回调函数
+在 JavaScript 中使用 setInterval 非常平常。一段常见的代码：
+```
+var someResource = getData();
+setInterval(function() {
+    var node = document.getElementById('Node');
+    if(node) {
+        // 处理 node 和 someResource
+        node.innerHTML = JSON.stringify(someResource));
+    }
+}, 1000);
+```
+
+此例说明了什么：与节点或数据关联的计时器不再需要，*node* 对象可以删除，整个回调函数也不需要了。可是，计时器回调函数仍然没被回收（计时器停止才会被回收）。同时，*someResource* 如果存储了大量的数据，也是无法被回收的。
+
+对于观察者的例子，一旦它们不再需要（或者关联的对象变成不可达），明确地移除它们非常重要。老的 IE 6 是无法处理循环引用的。如今，即使没有明确移除它们，一旦观察者对象变成不可达，大部分浏览器是可以回收观察者处理函数的。
+
+观察者代码示例：
+```
+var element = document.getElementById('button');
+function onClick(event) {
+    element.innerHTML = 'text';
+}
+element.addEventListener('click', onClick);   // => 循环调用
+```
+
+**对象观察者和循环引用注意事项**
+老版本的 IE 是无法检测 DOM 节点与 JavaScript 代码之间的循环引用，会导致内存泄漏。如今，现代的浏览器（包括 IE 和 Microsoft Edge）使用了更先进的垃圾回收算法，已经可以正确检测和处理循环引用了。换言之，回收节点内存时，不必非要调用 removeEventListener 了。
+
+##### 脱离 DOM 的引用
+有时，保存 DOM 节点内部数据结构很有用。假如你想快速更新表格的几行内容，把每一行 DOM 存成字典（JSON 键值对）或者数组很有意义。此时，同样的 DOM 元素存在两个引用：一个在 DOM 树中，另一个在字典中。将来你决定删除这些行时，需要把两个引用都清除.
+```
+var elements = {
+    button: document.getElementById('button'),
+    image: document.getElementById('image'),
+    text: document.getElementById('text')
+};
+function doStuff() {
+    image.src = 'http://some.url/image';
+    button.click();
+    console.log(text.innerHTML);
+    // 更多逻辑
+}
+function removeButton() {
+    // 按钮是 body 的后代元素
+    document.body.removeChild(document.getElementById('button'));
+    // 此时，仍旧存在一个全局的 #button 的引用
+    // elements 字典。button 元素仍旧在内存中，不能被 GC 回收。
+}
+```
+此外还要考虑 DOM 树内部或子节点的引用问题。假如你的 JavaScript 代码中保存了表格某一个 \<td> 的引用。将来决定删除整个表格的时候，直觉认为 GC 会回收除了已保存的 \<td> 以外的其它节点。实际情况并非如此：此 \<td> 是表格的子节点，子元素与父元素是引用关系。由于代码保留了 \<td> 的引用，导致整个表格仍待在内存中。保存 DOM 元素引用的时候，要小心谨慎。
+
+##### 闭包
+> 如果闭包的作用域中保存着一个 HTML 元素，则该元素无法被销毁。(下面代码来自高程)
+
+闭包是 JavaScript 开发的一个关键方面：匿名函数可以访问父级作用域的变量。
+```
+function assgin() {
+    var ele = document.getElementById('someEle');
+    ele.onclick = function(){
+        alert(ele.id);
+    }
+}
+```
+
+以上代码创建了一个作为 ele 元素事件处理程序的闭包，而这个闭包有创建了一个循环的引用，由于匿名函数保存了一个 assgin() 的活动对象的引用 ，因此无法减少对 ele 的引用次数 , 只要匿名函数存在，ele的引用次数至少是 1。我们可以稍微改写一下:
+``` 
+function assgin() {
+    var ele = document.getElementById('someEle');
+    var id = ele.id
+    ele.onclick = function(){
+        alert(id);
+    }
+    ele = null;
+}
+```
+
+上面代码中，通过把 ele.id 的一个副本保存在一个变量中，并且在比保重引用该变量消除了循环引用，但是这样还不能解决内存泄露，*闭包会引用包含函数的整个活动对象*，而其中包含着 ele ，即使闭包不直接引用 ele ，包含函数的活动对象中也会保存 一个引用，因此需要把 ele 变量设置为 null ,这样就解除了对 DOM 对象的引用，减少其引用数，确保能正常回收。
+
+关于内存的发现 chrome 的使用~暂时没有使用过，看不太明白，就不 copy 了。
+
+### 上述内容 copy 自下面二者：
+
+[JavaScript 内存泄漏教程-阮一峰](http://www.ruanyifeng.com/blog/2017/04/memory-leak.html)
+[4类 JavaScript 内存泄漏及如何避免](https://jinlong.github.io/2016/05/01/4-Types-of-Memory-Leaks-in-JavaScript-and-How-to-Get-Rid-Of-Them/)
+## ajax 原生实现
+```
+var xhr = createXHR()
+xhr.onreadystatechange = function() {
+    if(xhr.readyState == 4) {
+        if(xhr.status == 200) {
+            console.log(xhr.responeText)
+            //do sth...
+        } else {
+            console.log('request fail' + xhr.status)
+        }
+    }
+};
+xhr.open('get', 'hello.com', true)
+xhr.send(null);
+```
+
+## 闭包的理解
+闭包是指有权访问另一个函数作用域中的变量的函数。
+[闭包的应用](http://hexin.life/2017/04/15/title-7/)
+## [html中一段文本内容 hdslakd*dnska8das ，将文本中含有数组['d', 'a', '*', '8'] 中的内容标记为红色文本(字符串有改动)](http://hexin.life/more/pdd.html)
+### 设定 html 结构
+```
+    <style>
+        .mark {
+            color: red;
+        }
+    </style>
+    
+<html>
+    <body>
+        <div class='textToMark'>
+        hdslakddnska8das
+        </div>
+    </body>
+</html>
+```
+
+### 方法一:循环
+```
+    const textToMark = document.querySelector('.textToMark');
+    
+    const text = textToMark.innerHTML;
+
+    const arr = ['d', 'a', '*', '8'];
+
+    const newText = text.split('');
+
+    function toMark (textArr, arr) {
+        for(let i = 0; i < newText.length; i++) {
+            for(let j = 0; j < arr.length; j++) {
+                if(newText[i] == arr[j]) {
+                    newText[i] = `<span class='mark'>${newText[i]}</span>`;
+                }
+            }
+        }
+        return newText;
+    }
+    toMark(newText, arr);
+    textToMark.innerHTML = newText.join('');
+```
+
+### 方法二: 字符串的 replace
+```
+    const textToMark = document.querySelector('.textToMark');
+    
+    const text = textToMark.innerHTML;
+
+    const reg = /[da\*8]+/g;
+
+    var newtext = text.replace(reg, (match) => {
+        return match = `<span class='mark'>${match}</span>`;
+    });
+    
+    textToMark.innerHTML = newtext;
+```
+
+> 代码为个人写出，如果有更好的办法欢迎指教
+
+## [原生JS创建这样的 dom 结构 < div id='hello'> < p class='textToMark'>hdslakddnska8das< p>< /div>](http://hexin.life/more/pdd.html)
+```
+function createElement () {
+   var body = document.body;
+   var div = document.createElement('div')
+   div.setAttribute('id', 'hello')
+
+   body.appendChild(div)
+
+   var p = document.createElement('p')
+   p.className = 'textToMark'
+   p.innerHTML = 'hdslakddnska8das'
+
+   div.appendChild(p)
+}
+createElement();
+```
+
+## [创建一个函数对 JS 基础类型 ( function, boolean, array, number, string, object) 进行值复制](http://hexin.life/more/pdd.html)
+```
+    function valueToCopy (valueBeCopy) {
+        var copyValue;
+        if (typeof (+valueBeCopy) === 'number' && typeof valueBeCopy !== 'object') {
+            copyValue = +valueBeCopy;
+        } else if (typeof valueBeCopy === 'string') {
+            copyValue = parseInt(+copyValue);
+        } else if (typeof valueBeCopy === 'object'){
+            if(Array.isArray(valueBeCopy)) {
+                copyValue = valueBeCopy.slice();
+            }
+            copyValue = JSON.parse(JSON.stringify(valueBeCopy))
+        } 
+            copyValue = valueBeCopy;
+        // console.log(copyValue)
+        return copyValue;   
+    }
+```
+
+![test img](http://or3233yyd.bkt.clouddn.com//17-8-2/50845409.jpg)
+
+## url 输入到页面完成经历了什么
+
+# [选择题](http://hexin.life/more/pdd.html)
+## 执行顺序
+```
+var input = document.getElementById('cls')
+
+input.onmouseup = function() {
+    console.log('onmouseup')
+}
+input.onmousedown = function() {
+    console.log('onmousedown')
+}
+input.onclick = function() {
+    console.log('onclick')
+}
+input.onfocus = function() {
+    console.log('onfocus')
+}
+```
+
+> onmousedown => onfocus => onmouseup => onclick
+
+## [a 链接默认事件的阻止](http://hexin.life/more/pdd.html)
+> A. a.onmouseup = function(e) {
+        e.preventDefault()
+    }
+B.  a.onmousedown = function(e) {
+        e.preventDefault()
+    }
+C.  a.onclick = function(e) {
+        e.preventDefault()
+     }
+D. A B C 都可以~
+
+ - => 经测试只有 onclick 可以    
+
+## IE浏览器中 attachEvent 方式的事件绑定
+> attachEvent的this总是Window。
+```
+el.attachEvent('onclick', function(){
+    alert(this);
+});
+```
+
+## HTTP状态码
+- 400 Bad Request
+由于明显的客户端错误（例如，格式错误的请求语法，太大的大小，无效的请求消息或欺骗性路由请求），服务器不能或不会处理该请求。[31]
+- 401 Unauthorized（RFC 7235）
+参见：HTTP基本认证、HTTP摘要认证
+类似于403 Forbidden，401语义即“未认证”，即用户没有必要的凭据。[32]该状态码表示当前请求需要用户验证。
+
+注意：当网站（通常是网站域名）禁止IP地址时，有些网站状态码显示的401，表示该特定地址被拒绝访问网站。
+- 402 Payment Required
+该状态码是为了将来可能的需求而预留的。该状态码最初的意图可能被用作某种形式的数字现金或在线支付方案的一部分，但几乎没有哪家服务商使用，而且这个状态码通常不被使用。如果特定开发人员已超过请求的每日限制，Google Developers API会使用此状态码。[34]
+- 403 Forbidden
+服务器已经理解请求，但是拒绝执行它。与401响应不同的是，身份验证并不能提供任何帮助，而且这个请求也不应该被重复提交。如果这不是一个HEAD请求，而且服务器希望能够讲清楚为何请求不能被执行，那么就应该在实体内描述拒绝的原因。当然服务器也可以返回一个404响应，假如它不希望让客户端获得任何信息。
+
+## 选择正确答案(构造函数的引用地址)
+```
+var str = 'asd;  
+var str2 = new String(str)  var str1 = new String(str)
+console.log(str1 == str2 , str1 === str2)
+```
+A. true  true
+B. true false
+C. false true
+D. false false
+
+//  => 输出 => false false
+
+> 因为 new 出来的俩个字符串引用地址不同
+
+##  下面的输出结果 (this 指向问题)
+```
+    function one () { 
+        this.name = 1;
+        return function two () {
+            this.name = 2;
+            return function three() {
+                var name = 3;
+                console.log(this.name);
+            }
+        }
+    }
+    one()()()  // => 2;
+```
+
+> 还有一部分题忘掉喽 ~ 还有一些题具体的记不太清了，稍作修改，考点计本差不多，上面答案有的是我自己写的，有的是我 google 整理出来的，笔试期间摄像头坏了，而且不小心弹出去了三四次~就当练习了吧，反正简历也没准备好呢，哦，对了，考点大多都在高程中有详细讲解，需要好好看一下高程，面试应该会问一些 Node 和 ES6吧，如果有错误或者更好的方法请告诉我 QQ: 1476792107- -love & peace
