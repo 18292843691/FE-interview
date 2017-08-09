@@ -1,7 +1,7 @@
 ---
-title: 面试
+title: 面试准备
 date: 2017-07-29 16:09:22
-tags: 面试
+tags: 面试准备
 categories: 前端
 ---
 
@@ -16,8 +16,15 @@ categories: 前端
 - Function
 ## 何时使用 === 何时使用 ==
 
--  需要判断类型是否相等时使用全等(===)
 -  不需要判断类型是否相等，即需要隐式类型转换的时候使用 ==
+判断对象中属性是否存在
+```
+if(obj.a == nul)  // => 等同于  obj.a === null || obj.a === undefined
+// => jquery 推荐写法(源码)
+```
+
+- 其他情况全部用 ===
+
 ##window.onload 和 DOMContentLoaded 的区别
 
 ###window.onload
@@ -434,6 +441,81 @@ function cal(arr) {
 然后网上搜了一下，发现有人整理的很全，就拉过来学习吧
 
 [ 七种方案解决JavaScript交换两个变量值的问题](http://blog.csdn.net/q1056843325/article/details/53223914)
+
+## 实现对对象和数组的 forEach
+
+```
+function forEach(obj, index, value, fn) {
+    if (obj == null) return;
+    if (!fn) {
+        if (typeof obj === 'function' && obj.call) {
+            fn = Function
+        } else if (typeof obj.forEach === 'function' && obj.forEach != arguments.callee) {
+            // 如果对象内部已经实现 forEach ，例如数组
+            obj.forEach(index, value)
+            return;
+        } else if (typeof obj.length == 'number') {
+            // 如果是数组或者类数组的对象
+            _Array_forEach(obj, index, value)
+            return;
+        }
+    }
+    _Function_forEach(fn || Object, obj, index, value)
+}
+
+
+function _Array_forEach(arr, index, value) {
+    if(arr == null) return ;
+    let i = 0,
+        len = arr.length;
+    if(typeof arr === 'string') {
+        for(; i < len; i++) {
+            index.call(value, arr.charAt(i), i, arr)
+        }
+    } else {
+        for(; i < len; i++) {
+            index.call(value, arr[i], i, arr)
+        }
+    }
+}
+
+
+function _Function_forEach (fn, obj, index, value) {
+    for(let key in obj) {
+        if(obj.hasOwnProperty(key))
+            index.call(value, obj[key], key, obj)
+    }
+}
+```
+
+采自 大神司徒正美[javascript 的forEach函数](http://www.cnblogs.com/rubylouvre/archive/2009/11/10/1599978.html)
+
+## 实现对时间 xxxx-xx-xx 的获取
+
+```
+function formatDate(date) {
+    if (!date) {
+        date = new Date()
+    }
+
+    const year = date.getFullYear(),
+        month = (date.getMonth() + 1),         // month 是从 0 开始
+        day = date.getDate(),
+        hours = date.getHours(),
+        minutes = date.getMinutes(),
+        seconds = date.getSeconds();
+
+
+    return year + '-' + month + '-' + day
+}
+
+var date = new Date()
+var formatDate = formatDate(date)
+console.log(formatDate)
+2017-8-8
+```
+
+
 # HTML 知识
 ## [用 div 实现 textarea](http://hexin.life/more/用div制作textarea.html)
 
@@ -465,12 +547,12 @@ function cal(arr) {
 
 然后是自定义拖动大小, 利用 CSS3 的 resize ，再增加 overflow 属性
 ```css
-	margin: 50px;
-	padding-left: 3px;
-	width: 100px;
-	border: 1px solid #ccc;
-	resize: both;
-	overflow: hidden;
+    margin: 50px;
+    padding-left: 3px;
+    width: 100px;
+    border: 1px solid #ccc;
+    resize: both;
+    overflow: hidden;
 ```
 
 ![测试图片](http://or3233yyd.bkt.clouddn.com//17-8-1/97830271.jpg)
@@ -546,46 +628,46 @@ sub2.css
   - [target=_blank]: 选择 target="_blank" 的所有元素。
   - [title~=flower]: 选择 title 属性包含单词 "flower" 的所有元素。
   - [lang|=en]: 选择 lang 属性值以 "en" 开头的所有元素。
-  - :link	(a:link)	选择所有未被访问的链接。	1
+  - :link   (a:link)    选择所有未被访问的链接。    1
 
-选择器	      例子	       例子描述          	CSS
-- :visited	(a:visited)	选择所有已被访问的链接。	1
-- :active	(a:active)	选择活动链接。	1
-- :hover	(a:hover)	选择鼠标指针位于其上的链接。	1
-- :focus	(input:focus)	选择获得焦点的 input 元素。	2
-- :first-letter	(p:first-letter)	选择每个 p 元素的首字母。	1
-- :first-line	(p:first-line)	选择每个 p 元素的首行。	1
-- :first-child	(p:first-child)	选择属于父元素的第一个子元素的每个 p 元素。	2
-- :before	(p:before)	在每个 p 元素的内容之前插入内容。	2
-- :after	(p:after)	在每个 p 元素的内容之后插入内容。	2
+选择器       例子           例子描述             CSS
+- :visited  (a:visited) 选择所有已被访问的链接。    1
+- :active   (a:active)  选择活动链接。 1
+- :hover    (a:hover)   选择鼠标指针位于其上的链接。  1
+- :focus    (input:focus)   选择获得焦点的 input 元素。   2
+- :first-letter (p:first-letter)    选择每个 p 元素的首字母。  1
+- :first-line   (p:first-line)  选择每个 p 元素的首行。   1
+- :first-child  (p:first-child) 选择属于父元素的第一个子元素的每个 p 元素。 2
+- :before   (p:before)  在每个 p 元素的内容之前插入内容。  2
+- :after    (p:after)   在每个 p 元素的内容之后插入内容。  2
 
 等等等等....查看手册吧~太多了，记住常用的就行了，其他的用到了再查吧。
 #### CSS 伪类(觉得这个挺重要的-列举的有点多)
-- :first-of-type	(p:first-of-type)	选择属于其父元素的首个 p 元素的每个 p 元素。	3
-- :last-of-type	(p:last-of-type)	选择属于其父元素的最后 p 元素的每个 p 元素。	3
-- :only-of-type	(p:only-of-type)	选择属于其父元素唯一的 p 元素的每个 p 元素。	3
-- :only-child	(p:only-child)	选择属于其父元素的唯一子元素的每个 p 元素。	3
-- :nth-child(n)	(p:nth-child(2))	选择属于其父元素的第二个子元素的每个 p 元素。	3
-- :nth-last-child(n)	(p:nth-last-child(2))	同上，从最后一个子元素开始计数。	3
-- :nth-of-type(n)	(p:nth-of-type(2))	选择属于其父元素第二个 p 元素的每个 p 元素。	3
-- :nth-last-of-type(n)	(p:nth-last-of-type(2))	同上，但是从最后一个子元素开始计数。	3
-- :last-child	(p:last-child)	选择属于其父元素最后一个子元素每个 p 元素。	3
-- :last-child	p:last-child	选择属于其父元素最后一个子元素每个 p 元素。	3
-- :active	向被激活的元素添加样式。	1
-- :focus	向拥有键盘输入焦点的元素添加样式。	2
-- :hover	当鼠标悬浮在元素上方时，向元素添加样式。	1
-- :link	向未被访问的链接添加样式。	1
-- :visited	向已被访问的链接添加样式。	1
-- :first-child	向元素的第一个子元素添加样式。	2
-- :lang	向带有指定 lang 属性的元素添加样式。	2
-- :root	:root	选择文档的根元素。	3
-- :empty	( p:empty )	选择没有子元素的每个 p 元素（包括文本节点）。	3
-- :target	( #news:target )	选择当前活动的 #news 元素。	3
-- :enabled	( input:enabled )	选择每个启用的 input 元素。	3
-- :disabled	( input:disabled )	选择每个禁用的 input 元素	3
-- :checked	( input:checked )	选择每个被选中的 input 元素。	3
-- :not(selector)	( :not(p) )	选择非 p 元素的每个元素。	3
-- ::selection	( ::selection )	选择被用户选取的元素部分。	3
+- :first-of-type    (p:first-of-type)   选择属于其父元素的首个 p 元素的每个 p 元素。   3
+- :last-of-type (p:last-of-type)    选择属于其父元素的最后 p 元素的每个 p 元素。   3
+- :only-of-type (p:only-of-type)    选择属于其父元素唯一的 p 元素的每个 p 元素。   3
+- :only-child   (p:only-child)  选择属于其父元素的唯一子元素的每个 p 元素。 3
+- :nth-child(n) (p:nth-child(2))    选择属于其父元素的第二个子元素的每个 p 元素。    3
+- :nth-last-child(n)    (p:nth-last-child(2))   同上，从最后一个子元素开始计数。    3
+- :nth-of-type(n)   (p:nth-of-type(2))  选择属于其父元素第二个 p 元素的每个 p 元素。   3
+- :nth-last-of-type(n)  (p:nth-last-of-type(2)) 同上，但是从最后一个子元素开始计数。  3
+- :last-child   (p:last-child)  选择属于其父元素最后一个子元素每个 p 元素。 3
+- :last-child   p:last-child    选择属于其父元素最后一个子元素每个 p 元素。 3
+- :active   向被激活的元素添加样式。    1
+- :focus    向拥有键盘输入焦点的元素添加样式。   2
+- :hover    当鼠标悬浮在元素上方时，向元素添加样式。    1
+- :link 向未被访问的链接添加样式。   1
+- :visited  向已被访问的链接添加样式。   1
+- :first-child  向元素的第一个子元素添加样式。 2
+- :lang 向带有指定 lang 属性的元素添加样式。   2
+- :root :root   选择文档的根元素。   3
+- :empty    ( p:empty ) 选择没有子元素的每个 p 元素（包括文本节点）。    3
+- :target   ( #news:target )    选择当前活动的 #news 元素。   3
+- :enabled  ( input:enabled )   选择每个启用的 input 元素。   3
+- :disabled ( input:disabled )  选择每个禁用的 input 元素    3
+- :checked  ( input:checked )   选择每个被选中的 input 元素。  3
+- :not(selector)    ( :not(p) ) 选择非 p 元素的每个元素。  3
+- ::selection   ( ::selection ) 选择被用户选取的元素部分。   3
  
 ##### 部分应用
 ###### :after伪类 
@@ -593,12 +675,12 @@ sub2.css
 - 经典的[清除浮动](http://hexin.life/2017/07/29/title-22/) => :[after伪类+content 清除浮动的影响](http://www.zhangxinxu.com/wordpress/2010/09/after%E4%BC%AA%E7%B1%BBcontent%E5%86%85%E5%AE%B9%E7%94%9F%E6%88%90%E5%B8%B8%E8%A7%81%E5%BA%94%E7%94%A8%E4%B8%BE%E4%BE%8B/)
 ```
 .fix:after{
-	display:block; 
-	content:"clear"; 
-	height:0; 
-	clear:both; 
-	overflow:hidden; 
-	visibility:hidden;
+    display:block; 
+    content:"clear"; 
+    height:0; 
+    clear:both; 
+    overflow:hidden; 
+    visibility:hidden;
 }
 .fix{*zoom:1;}  /* IE */
 ```
@@ -607,23 +689,23 @@ sub2.css
 
 ```
 .pic_box{
-	width:300px; 
-	height:300px; 
-	background-color:#beceeb; 
-	font-size:0; 
-	*font-size:200px; 
-	text-align:center;
-	}
+    width:300px; 
+    height:300px; 
+    background-color:#beceeb; 
+    font-size:0; 
+    *font-size:200px; 
+    text-align:center;
+    }
 .pic_box img{
-	vertical-align:middle;
+    vertical-align:middle;
 }
 .pic_box:after{
-	display:inline-block; 
-	width:0; 
-	height:100%; 
-	content:"center"; 
-	vertical-align:middle; 
-	overflow:hidden;
+    display:inline-block; 
+    width:0; 
+    height:100%; 
+    content:"center"; 
+    vertical-align:middle; 
+    overflow:hidden;
 }
 ```
 
@@ -635,7 +717,7 @@ sub2.css
 
 ```css
 p::selection{
-	background-color: red;
+    background-color: red;
 }
 ```
 
@@ -738,7 +820,7 @@ p::selection{
  - skew() 包含两个参数值skewX(< angle>), skewY(< angle>)，分别表示X轴和Y轴倾斜的角度，如果第二个参数为空，则默认为0，参数为负表示向相反方向倾斜
  - matrix() matrix 方法有六个参数，包含旋转，缩放，移动（平移）和倾斜功能。
 - CSS3 3D 转换
- - perspective(n)	=> 定义 3D 转换元素的透视视图。
+ - perspective(n)   => 定义 3D 转换元素的透视视图。
 - CSS3 过渡
  - transition => 简写属性，用于在一个属性中设置四个过渡属性。 => 3
  - transition-property => 规定应用过渡的 CSS 属性的名称。 => 3
@@ -760,21 +842,21 @@ p::selection{
 
 
 - CSS3 图片
-	   - [响应式图片](http://www.runoob.com/try/try.php?filename=trycss_ex_images_responsive) => max-width: 100%;
-	   - 图片滤镜 => [css滤镜](http://www.runoob.com/cssref/css3-pr-filter.html)
-	   - [响应式图片相册](http://www.runoob.com/try/try.php?filename=trycss_image_gallery_responsive) 
-	   - [图片 Modal(模态)](http://www.runoob.com/try/try.php?filename=trycss_image_modal_js)
+       - [响应式图片](http://www.runoob.com/try/try.php?filename=trycss_ex_images_responsive) => max-width: 100%;
+       - 图片滤镜 => [css滤镜](http://www.runoob.com/cssref/css3-pr-filter.html)
+       - [响应式图片相册](http://www.runoob.com/try/try.php?filename=trycss_image_gallery_responsive) 
+       - [图片 Modal(模态)](http://www.runoob.com/try/try.php?filename=trycss_image_modal_js)
 - CSS3 按钮
-	 -  [按钮动画](http://www.runoob.com/try/try.php?filename=trycss_buttons_animate1)
+     -  [按钮动画](http://www.runoob.com/try/try.php?filename=trycss_buttons_animate1)
 - CSS3 分页
 - CSS3 框大小 =>  box-sizing 属性可以设置 width 和 height 属性中包含了 padding(内边距) 和 border(边框)。
-	    - 关于 [border-box ](http://hexin.life/2017/07/11/title-15/) 
+        - 关于 [border-box ](http://hexin.life/2017/07/11/title-15/) 
 - CSS3 [弹性盒子](http://www.ruanyifeng.com/blog/2015/07/flex-grammar.html)
 - [CSS3 多媒体查询](https://developer.mozilla.org/zh-CN/docs/Web/Guide/CSS/Media_queries)
-		  - viewport(视窗) 的宽度与高度
-		  - 设备的宽度与高度
-		  - 朝向 (智能手机横屏，竖屏) 。
-		  - 分辨率 
+          - viewport(视窗) 的宽度与高度
+          - 设备的宽度与高度
+          - 朝向 (智能手机横屏，竖屏) 。
+          - 分辨率 
 
 ## 垂直居中
 ### [大小不固定的图片、多行文字的水平垂直居中](http://www.zhangxinxu.com/wordpress/2009/08/%E5%A4%A7%E5%B0%8F%E4%B8%8D%E5%9B%BA%E5%AE%9A%E7%9A%84%E5%9B%BE%E7%89%87%E3%80%81%E5%A4%9A%E8%A1%8C%E6%96%87%E5%AD%97%E7%9A%84%E6%B0%B4%E5%B9%B3%E5%9E%82%E7%9B%B4%E5%B1%85%E4%B8%AD/)
@@ -1165,6 +1247,8 @@ function assgin() {
 
 关于内存的发现 chrome 的使用~暂时没有使用过，看不太明白，就不 copy 了。
 
+[js闭包测试](http://www.cnblogs.com/rubylouvre/p/3345294.html) => 看不懂~
+
 ### 上述内容 copy 自下面二者：
 
 [JavaScript 内存泄漏教程-阮一峰](http://www.ruanyifeng.com/blog/2017/04/memory-leak.html)
@@ -1188,6 +1272,12 @@ xhr.send(null);
 
 ## 闭包的理解
 闭包是指有权访问另一个函数作用域中的变量的函数。
+这个口述我还是不知道怎么说，或许是应用不够~看了无数文章到头来敌不过忘记~也可能我理解的还是不到位吧~个人不解释了，放参考链接吧
+[How do JavaScript closures work?--StackOverflow](https://stackoverflow.com/questions/111102/how-do-javascript-closures-work)
+[学习Javascript闭包（Closure）--阮一峰的网络日志](http://www.ruanyifeng.com/blog/2009/08/learning_javascript_closures.html)
+[JS 中的闭包是什么--方应杭](https://zhuanlan.zhihu.com/p/22486908)
+[JavaScript 中 闭包 的详解](https://github.com/lin-xin/blog/issues/8)
+[闭包--MDN](https://developer.mozilla.org/cn/docs/Web/JavaScript/Closures)
 [闭包的应用](http://hexin.life/2017/04/15/title-7/)
 ## [html中一段文本内容 hdslakd*dnska8das ，将文本中含有数组['d', 'a', '*', '8'] 中的内容标记为红色文本(字符串有改动)](http://hexin.life/more/pdd.html)
 ### 设定 html 结构
@@ -1250,21 +1340,84 @@ xhr.send(null);
 
 ## [原生JS创建这样的 dom 结构 < div id='hello'> < p class='textToMark'>hdslakddnska8das< p>< /div>](http://hexin.life/more/pdd.html)
 ```
-function createElement () {
-   var body = document.body;
-   var div = document.createElement('div')
-   div.setAttribute('id', 'hello')
+function createElement() {
+        var body = document.body;
+    
+        var fragment = document.createDocumentFragment()      
 
-   body.appendChild(div)
+        var div = document.createElement('div')
+        div.setAttribute('id', 'hello')
 
-   var p = document.createElement('p')
-   p.className = 'textToMark'
-   p.innerHTML = 'hdslakddnska8das'
+        fragment.appendChild(div)
 
-   div.appendChild(p)
-}
-createElement();
+        var p = document.createElement('p')
+        p.className = 'textToMark'
+        p.innerHTML = 'hdslakddnska8das'
+
+        div.appendChild(p);
+        body.appendChild(fragment)
+    }
+    createElement();
 ```
+
+感谢评论指出，已改正，关于节点创建 createElement 的效率问题，如果**当插入的节点很多**的时候，createElement 的效率会不如 createDocumentFragment .
+createElement 每次 append 一个节点的时候，都会导致页面的重排，例如:
+
+数据为这样:
+```
+<ul id="myList">
+    <li>
+        <a href="www.baidu.com"></a>
+    </li>
+    <li>
+        <a href="www.helloworld.com"></a>
+    </li>
+</ul>
+
+
+var data = [
+    { name: '36O秋招', url: 'http://campus.360.cn/2015/grad.html'},
+    { name: 'TX校招', url: 'http://join.qq.com/index.php'}
+]
+
+```
+```
+function appendChildToElement(appendToElement, data) {
+    var a, li;
+    for (var i = 0, len = data.length; i < len; i++) {
+        a = document.createElement('a');
+        a.href = data[i].url;
+        a.appChild(document.createTextNode(data[i].name))
+        li = document.createElement('li');
+        li.appendChild(a);
+        appendChildToElement(li);
+    }
+}
+```
+
+这种情况下，data 内的每一个对象插入到 DOM 结构的时候都会触发一次重排，因此效率会较低。
+但是我们可以改变他的 display 属性，临时从文档移除 ul ，即可有效减少重排次数。
+
+```
+var ul = document.getElementById('myList');
+ur.style.display = 'none';
+appendChildToElement(ul, data);
+ul.style.display = 'block';
+```
+
+当然，更好的办法就是利用 createDocumentFragment 来创建一个文档片段.
+```
+var fragment = document.createElementFragment();
+appendChildToElement(fragment, data);
+document.getElementById('myList').appendChild(fragment);
+```
+只访问了一次 DOM 节点，只触发了一次重排;再次感谢 @xaclincoln 的指出。
+
+查了一些关于 createDocumentFragment 和 createElement 比较的文章。
+- [createDocumentFragment or createElement--StackOverflow](https://stackoverflow.com/questions/3397161/should-i-use-document-createdocumentfragment-or-document-createelement) 
+- [createElement vs createDocumentFragment](https://jsperf.com/createelement-vs-createdocumentfragment)
+- [createElement 与 createDocumentFragment 的点点区别](http://www.cnblogs.com/xesam/archive/2011/12/19/2293876.html)
+- [CreateDocumentFragment 的用处](http://www.cnitblog.com/asfman/articles/32614.html)
 
 ## [创建一个函数对 JS 基础类型 ( function, boolean, array, number, string, object) 进行值复制](http://hexin.life/more/pdd.html)
 ```
@@ -1273,7 +1426,7 @@ createElement();
         if (typeof (+valueBeCopy) === 'number' && typeof valueBeCopy !== 'object') {
             copyValue = +valueBeCopy;
         } else if (typeof valueBeCopy === 'string') {
-            copyValue = parseInt(+copyValue);
+            copyValue = parseInt(copyValue);
         } else if (typeof valueBeCopy === 'object'){
             if(Array.isArray(valueBeCopy)) {
                 copyValue = valueBeCopy.slice();
@@ -1289,7 +1442,8 @@ createElement();
 ![test img](http://or3233yyd.bkt.clouddn.com//17-8-2/50845409.jpg)
 
 ## url 输入到页面完成经历了什么
-
+感觉这篇文章非常非常详细了~太长了，过段时间再整理(抄袭~)
+[老生常谈-从输入url到页面展示到底发生了什么](http://www.kuqin.com/shuoit/20170324/353413.html)
 # [选择题](http://hexin.life/more/pdd.html)
 ## 执行顺序
 ```
@@ -1366,7 +1520,7 @@ D. false false
     function one () { 
         this.name = 1;
         return function two () {
-            this.name = 2;
+                name = 2;
             return function three() {
                 var name = 3;
                 console.log(this.name);
@@ -1376,4 +1530,6 @@ D. false false
     one()()()  // => 2;
 ```
 
-> 还有一部分题忘掉喽 ~ 还有一些题具体的记不太清了，稍作修改，考点计本差不多，上面答案有的是我自己写的，有的是我 google 整理出来的，笔试期间摄像头坏了，而且不小心弹出去了三四次~就当练习了吧，反正简历也没准备好呢，哦，对了，考点大多都在高程中有详细讲解，需要好好看一下高程，面试应该会问一些 Node 和 ES6吧，如果有错误或者更好的方法请告诉我 QQ: 1476792107- -love & peace
+> 还有一部分题忘掉喽 ~ 还有一些题具体的记不太清了，稍作修改，考点计本差不多，上面答案有的是我自己写的，有的是我 google 整理出来的，笔试期间摄像头坏了，而且不小心弹出去了三四次~就当练习了吧，反正简历也没准备好呢，哦，对了，考点大多都在高程中有详细讲解，需要好好看一下高程，面试应该会问一些 Node 和 ES6吧，如果有错误或者更好的方法请告诉我 
+
+更多笔试整理更新在[个人博客](http://hexin.life/2017/08/01/title-22/)和[Github](https://github.com/18292843691/FE-interview)，欢迎小伙伴来一起准备秋招(求大腿抱)。
