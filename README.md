@@ -5,6 +5,490 @@ tags: 面试准备
 categories: 前端
 ---
 
+# 简答题：
+## settimeout 与 setInterval的区别， 及对他们的内存的分析
+### 区别
+1. setTimeout是在一段时间后调用指定函数（仅一次）
+2. setInterval是每隔一段时间调用指定函数（N次）
+```
+function run(){
+    // 其他代码
+    setTimeout(function(){
+        run();
+    }, 10000);
+}
+run();
+```
+以上面的代码来说, 虽然设置的是10s执行一次, 但是实际时间却是需要// 其他代码的执行时间来确定
+即setTimeout的间隔时间是, // setTimeout 的间隔时间 === 最小时间是(10s+)
+
+
+```
+setInterval(function(){
+    run();
+}, 10000);
+```
+而setInterval, 不会有上面的问题, 但是如果run()的执行时间, 操作大于10s, 那么甚至可能跳过任务;
+
+[setInterval 和 setTimeout 会产生内存溢出](http://www.pjhome.net/article/Javascript/822.html)
+[JavaScript setInterval()方法是否导致内存泄漏？](https://gxnotes.com/article/65338.html)
+
+## 关于内存泄漏
+### 内存
+程序的运行需要内存。只要程序提出要求，操作系统或者运行时（runtime）就必须供给内存。
+对于持续运行的服务进程（daemon），必须及时释放不再用到的内存。否则，内存占用越来越高，轻则影响系统性能，重则导致进程崩溃。
+不再用到的内存，没有及时释放，就叫做内存泄漏（memory leak）。
+（比如 C 语言）必须手动释放内存，程序员负责内存管理。
+```
+char * buffer;
+buffer = (char*) malloc(42);
+
+//...
+
+free(buffer)    //手动释放内存
+```
+
+> 上面是 C 语言代码，malloc方法用来申请内存，使用完毕之后，必须自己用free方法释放内存。
+这很麻烦，所以大多数语言提供自动内存管理，减轻程序员的负担，这被称为"垃圾回收机制"（garbage collector）。
+
+### 垃圾回收机制
+怎么知道哪些内存不再需要呢？常用的方法是 '引用计数', 语言的引擎有一张 '引用表', 保存了内存里面所有的资源(通常是各种值)的引用次数，当一个值的引用次数为 0 时，表示这个值用不到了，因此可将其释放。
+
+但是如果一个值不再用到了，引用次数却不为 0 ，垃圾回收机制却无法释放这块内存，从而导致内存泄漏。
+```
+const arr = [1, 2, 3, 4];
+console.log(arr);
+```
+
+打印完 arr 之后, arr 便用不到了，引用次数为 1, 但是它还会继续占用内存。
+```
+const arr = [1, 2, 3, 4];
+console.log(arr);
+arr = null;
+```
+
+arr 重置为 null，就解除了对 [1, 2, 3, 4] 的引用，引用次数变成了 0 ，内存就可以释放了。
+
+### JavaScript 内存管理
+JavaScript 是一种垃圾回收语言。垃圾回收语言通过周期性地检查先前分配的内存是否可达，帮助开发者管理内存。换言之，垃圾回收语言减轻了“内存仍可用”及“内存仍可达”的问题。两者的区别是微妙而重要的：仅有开发者了解哪些内存在将来仍会使用，而不可达内存通过算法确定和标记，适时被操作系统回收。
+
+### JavaScript 内存泄漏
+
+垃圾回收语言的内存泄漏主因是不需要的引用。理解它之前，还需了解垃圾回收语言如何辨别内存的可达与不可达。
+
+**Mark-and-sweep**
+1. 大部分垃圾回收语言用的算法称之为 Mark-and-sweep 。算法由以下几步组成：
+垃圾回收器创建了一个“roots”列表。Roots 通常是代码中全局变量的引用。JavaScript 中，“window” 对象是一个全局变量，被当作 root 。window 对象总是存在，因此垃圾回收器可以检查它和它的所有子对象是否存在（即不是垃圾）；
+2. 所有的 roots 被检查和标记为激活（即不是垃圾）。所有的子对象也被递归地检查。从 root 开始的所有对象如果是可达的，它就不被当作垃圾。
+3. 所有未被标记的内存会被当做垃圾，收集器现在可以释放内存，归还给操作系统了。
+
+现代的垃圾回收器改良了算法，但是本质是相同的：可达内存被标记，其余的被当作垃圾回收。
+
+不需要的引用是指开发者明知内存引用不再需要，却由于某些原因，它仍被留在激活的 root 树中。在 JavaScript 中，不需要的引用是保留在代码中的变量，它不再需要，却指向一块本该被释放的内存。有些人认为这是开发者的错误。
+
+为了理解 JavaScript 中最常见的内存泄漏，我们需要了解哪种方式的引用容易被遗忘。
+
+#### 常见 JavaScript 内存泄漏
+##### 意外的全局变量
+JavaScript 处理未定义变量的方式比较宽松：未定义的变量会在全局对象创建一个新变量。在浏览器中，全局对象是 window 。
+```
+function foo(arg) {
+    bar = "this is a hidden global variable";
+}
+```
+真相是：
+```
+function foo(arg) {
+    window.bar = "this is an explicit global variable";
+}
+```
+
+函数 foo 内部忘记使用 var ，意外创建了一个全局变量。此例泄漏了一个简单的字符串，无伤大雅，但是有更糟的情况。
+
+另一种意外的全局变量可能由 this 创建：
+```
+function foo() {
+    this.variable = "potential accidental global";
+}
+// Foo 调用自己，this 指向了全局对象（window）
+// 而不是 undefined
+foo();
+```
+> 在 JavaScript 文件头部加上 'use strict'，可以避免此类错误发生。启用严格模式解析 JavaScript ，避免意外的全局变量。
+
+全局变量注意事项:
+尽管我们讨论了一些意外的全局变量，但是仍有一些明确的全局变量产生的垃圾。它们被定义为不可回收（除非定义为空或重新分配）。尤其当全局变量用于临时存储和处理大量信息时，需要多加小心。如果必须使用全局变量存储大量数据时，确保用完以后把它设置为 null 或者重新定义。与全局变量相关的增加内存消耗的一个主因是缓存。缓存数据是为了重用，缓存必须有一个大小上限才有用。高内存消耗导致缓存突破上限，因为缓存内容无法被回收。
+
+##### 被遗忘的计时器或回调函数
+在 JavaScript 中使用 setInterval 非常平常。一段常见的代码：
+```
+var someResource = getData();
+setInterval(function() {
+    var node = document.getElementById('Node');
+    if(node) {
+        // 处理 node 和 someResource
+        node.innerHTML = JSON.stringify(someResource));
+    }
+}, 1000);
+```
+
+此例说明了什么：与节点或数据关联的计时器不再需要，*node* 对象可以删除，整个回调函数也不需要了。可是，计时器回调函数仍然没被回收（计时器停止才会被回收）。同时，*someResource* 如果存储了大量的数据，也是无法被回收的。
+
+对于观察者的例子，一旦它们不再需要（或者关联的对象变成不可达），明确地移除它们非常重要。老的 IE 6 是无法处理循环引用的。如今，即使没有明确移除它们，一旦观察者对象变成不可达，大部分浏览器是可以回收观察者处理函数的。
+
+观察者代码示例：
+```
+var element = document.getElementById('button');
+function onClick(event) {
+    element.innerHTML = 'text';
+}
+element.addEventListener('click', onClick);   // => 循环调用
+```
+
+**对象观察者和循环引用注意事项**
+老版本的 IE 是无法检测 DOM 节点与 JavaScript 代码之间的循环引用，会导致内存泄漏。如今，现代的浏览器（包括 IE 和 Microsoft Edge）使用了更先进的垃圾回收算法，已经可以正确检测和处理循环引用了。换言之，回收节点内存时，不必非要调用 removeEventListener 了。
+
+##### 脱离 DOM 的引用
+有时，保存 DOM 节点内部数据结构很有用。假如你想快速更新表格的几行内容，把每一行 DOM 存成字典（JSON 键值对）或者数组很有意义。此时，同样的 DOM 元素存在两个引用：一个在 DOM 树中，另一个在字典中。将来你决定删除这些行时，需要把两个引用都清除.
+```
+var elements = {
+    button: document.getElementById('button'),
+    image: document.getElementById('image'),
+    text: document.getElementById('text')
+};
+function doStuff() {
+    image.src = 'http://some.url/image';
+    button.click();
+    console.log(text.innerHTML);
+    // 更多逻辑
+}
+function removeButton() {
+    // 按钮是 body 的后代元素
+    document.body.removeChild(document.getElementById('button'));
+    // 此时，仍旧存在一个全局的 #button 的引用
+    // elements 字典。button 元素仍旧在内存中，不能被 GC 回收。
+}
+```
+此外还要考虑 DOM 树内部或子节点的引用问题。假如你的 JavaScript 代码中保存了表格某一个 \<td> 的引用。将来决定删除整个表格的时候，直觉认为 GC 会回收除了已保存的 \<td> 以外的其它节点。实际情况并非如此：此 \<td> 是表格的子节点，子元素与父元素是引用关系。由于代码保留了 \<td> 的引用，导致整个表格仍待在内存中。保存 DOM 元素引用的时候，要小心谨慎。
+
+##### 闭包
+> 如果闭包的作用域中保存着一个 HTML 元素，则该元素无法被销毁。(下面代码来自高程)
+
+闭包是 JavaScript 开发的一个关键方面：匿名函数可以访问父级作用域的变量。
+```
+function assgin() {
+    var ele = document.getElementById('someEle');
+    ele.onclick = function(){
+        alert(ele.id);
+    }
+}
+```
+
+以上代码创建了一个作为 ele 元素事件处理程序的闭包，而这个闭包有创建了一个循环的引用，由于匿名函数保存了一个 assgin() 的活动对象的引用 ，因此无法减少对 ele 的引用次数 , 只要匿名函数存在，ele的引用次数至少是 1。我们可以稍微改写一下:
+``` 
+function assgin() {
+    var ele = document.getElementById('someEle');
+    var id = ele.id
+    ele.onclick = function(){
+        alert(id);
+    }
+    ele = null;
+}
+```
+
+上面代码中，通过把 ele.id 的一个副本保存在一个变量中，并且在比保重引用该变量消除了循环引用，但是这样还不能解决内存泄露，*闭包会引用包含函数的整个活动对象*，而其中包含着 ele ，即使闭包不直接引用 ele ，包含函数的活动对象中也会保存 一个引用，因此需要把 ele 变量设置为 null ,这样就解除了对 DOM 对象的引用，减少其引用数，确保能正常回收。
+
+关于内存的发现 chrome 的使用~暂时没有使用过，看不太明白，就不 copy 了。
+
+[js闭包测试](http://www.cnblogs.com/rubylouvre/p/3345294.html) => 看不懂~
+
+### 上述内容 copy 自下面二者：
+
+[JavaScript 内存泄漏教程-阮一峰](http://www.ruanyifeng.com/blog/2017/04/memory-leak.html)
+[4类 JavaScript 内存泄漏及如何避免](https://jinlong.github.io/2016/05/01/4-Types-of-Memory-Leaks-in-JavaScript-and-How-to-Get-Rid-Of-Them/)
+## ajax 原生实现
+```
+var xhr = createXHR()
+xhr.onreadystatechange = function() {
+    if(xhr.readyState == 4) {
+        if(xhr.status == 200) {
+            console.log(xhr.responeText)
+            //do sth...
+        } else {
+            console.log('request fail' + xhr.status)
+        }
+    }
+};
+xhr.open('get', 'hello.com', true)
+xhr.send(null);
+```
+
+## 闭包的理解
+闭包是指有权访问另一个函数作用域中的变量的函数。
+这个口述我还是不知道怎么说，或许是应用不够~看了无数文章到头来敌不过忘记~也可能我理解的还是不到位吧~个人不解释了，放参考链接吧
+[How do JavaScript closures work?--StackOverflow](https://stackoverflow.com/questions/111102/how-do-javascript-closures-work)
+[学习Javascript闭包（Closure）--阮一峰的网络日志](http://www.ruanyifeng.com/blog/2009/08/learning_javascript_closures.html)
+[JS 中的闭包是什么--方应杭](https://zhuanlan.zhihu.com/p/22486908)
+[JavaScript 中 闭包 的详解](https://github.com/lin-xin/blog/issues/8)
+[闭包--MDN](https://developer.mozilla.org/cn/docs/Web/JavaScript/Closures)
+[闭包的应用](http://hexin.life/2017/04/15/title-7/)
+## [html中一段文本内容 hdslakd*dnska8das ，将文本中含有数组['d', 'a', '*', '8'] 中的内容标记为红色文本(字符串有改动)](http://hexin.life/more/pdd.html)
+### 设定 html 结构
+```
+    <style>
+        .mark {
+            color: red;
+        }
+    </style>
+    
+<html>
+    <body>
+        <div class='textToMark'>
+        hdslakddnska8das
+        </div>
+    </body>
+</html>
+```
+
+### 方法一:循环
+```
+    const textToMark = document.querySelector('.textToMark');
+    
+    const text = textToMark.innerHTML;
+
+    const arr = ['d', 'a', '*', '8'];
+
+    const newText = text.split('');
+
+    function toMark (textArr, arr) {
+        for(let i = 0; i < newText.length; i++) {
+            for(let j = 0; j < arr.length; j++) {
+                if(newText[i] == arr[j]) {
+                    newText[i] = `<span class='mark'>${newText[i]}</span>`;
+                }
+            }
+        }
+        return newText;
+    }
+    toMark(newText, arr);
+    textToMark.innerHTML = newText.join('');
+```
+
+### 方法二: 字符串的 replace
+```
+    const textToMark = document.querySelector('.textToMark');
+    
+    const text = textToMark.innerHTML;
+
+    const reg = /[da\*8]+/g;
+
+    var newtext = text.replace(reg, (match) => {
+        return match = `<span class='mark'>${match}</span>`;
+    });
+    
+    textToMark.innerHTML = newtext;
+```
+
+> 代码为个人写出，如果有更好的办法欢迎指教
+
+## [原生JS创建这样的 dom 结构 < div id='hello'> < p class='textToMark'>hdslakddnska8das< p>< /div>](http://hexin.life/more/pdd.html)
+```
+function createElement() {
+        var body = document.body;
+    
+        var fragment = document.createDocumentFragment()      
+
+        var div = document.createElement('div')
+        div.setAttribute('id', 'hello')
+
+        fragment.appendChild(div)
+
+        var p = document.createElement('p')
+        p.className = 'textToMark'
+        p.innerHTML = 'hdslakddnska8das'
+
+        div.appendChild(p);
+        body.appendChild(fragment)
+    }
+    createElement();
+```
+
+感谢评论指出，已改正，关于节点创建 createElement 的效率问题，如果**当插入的节点很多**的时候，createElement 的效率会不如 createDocumentFragment .
+createElement 每次 append 一个节点的时候，都会导致页面的重排，例如:
+
+数据为这样:
+```
+<ul id="myList">
+    <li>
+        <a href="www.baidu.com"></a>
+    </li>
+    <li>
+        <a href="www.helloworld.com"></a>
+    </li>
+</ul>
+
+
+var data = [
+    { name: '36O秋招', url: 'http://campus.360.cn/2015/grad.html'},
+    { name: 'TX校招', url: 'http://join.qq.com/index.php'}
+]
+
+```
+```
+function appendChildToElement(appendToElement, data) {
+    var a, li;
+    for (var i = 0, len = data.length; i < len; i++) {
+        a = document.createElement('a');
+        a.href = data[i].url;
+        a.appChild(document.createTextNode(data[i].name))
+        li = document.createElement('li');
+        li.appendChild(a);
+        appendChildToElement(li);
+    }
+}
+```
+
+这种情况下，data 内的每一个对象插入到 DOM 结构的时候都会触发一次重排，因此效率会较低。
+但是我们可以改变他的 display 属性，临时从文档移除 ul ，即可有效减少重排次数。
+
+```
+var ul = document.getElementById('myList');
+ur.style.display = 'none';
+appendChildToElement(ul, data);
+ul.style.display = 'block';
+```
+
+当然，更好的办法就是利用 createDocumentFragment 来创建一个文档片段.
+```
+var fragment = document.createElementFragment();
+appendChildToElement(fragment, data);
+document.getElementById('myList').appendChild(fragment);
+```
+只访问了一次 DOM 节点，只触发了一次重排;再次感谢 @xaclincoln 的指出。
+
+查了一些关于 createDocumentFragment 和 createElement 比较的文章。
+- [createDocumentFragment or createElement--StackOverflow](https://stackoverflow.com/questions/3397161/should-i-use-document-createdocumentfragment-or-document-createelement) 
+- [createElement vs createDocumentFragment](https://jsperf.com/createelement-vs-createdocumentfragment)
+- [createElement 与 createDocumentFragment 的点点区别](http://www.cnblogs.com/xesam/archive/2011/12/19/2293876.html)
+- [CreateDocumentFragment 的用处](http://www.cnitblog.com/asfman/articles/32614.html)
+
+## [创建一个函数对 JS 基础类型 ( function, boolean, array, number, string, object) 进行值复制](http://hexin.life/more/pdd.html)
+```
+    function valueToCopy (valueBeCopy) {
+        var copyValue;
+        if (typeof (+valueBeCopy) === 'number' && typeof valueBeCopy !== 'object') {
+            copyValue = +valueBeCopy;
+        } else if (typeof valueBeCopy === 'string') {
+            copyValue = parseInt(copyValue);
+        } else if (typeof valueBeCopy === 'object'){
+            if(Array.isArray(valueBeCopy)) {
+                copyValue = valueBeCopy.slice();
+            }
+            copyValue = JSON.parse(JSON.stringify(valueBeCopy))
+        } 
+            copyValue = valueBeCopy;
+        // console.log(copyValue)
+        return copyValue;   
+    }
+```
+
+![test img](http://or3233yyd.bkt.clouddn.com//17-8-2/50845409.jpg)
+
+## [url 输入到页面完成经历了什么](http://hexin.life/2017/08/10/title-23/)
+
+[专门整理一篇尽可能详细的~](http://hexin.life/2017/08/10/title-23/)
+
+# [选择题](http://hexin.life/more/pdd.html)
+## 执行顺序
+```
+var input = document.getElementById('cls')
+
+input.onmouseup = function() {
+    console.log('onmouseup')
+}
+input.onmousedown = function() {
+    console.log('onmousedown')
+}
+input.onclick = function() {
+    console.log('onclick')
+}
+input.onfocus = function() {
+    console.log('onfocus')
+}
+```
+
+> onmousedown => onfocus => onmouseup => onclick
+
+## [a 链接默认事件的阻止](http://hexin.life/more/pdd.html)
+> A. a.onmouseup = function(e) {
+        e.preventDefault()
+    }
+B.  a.onmousedown = function(e) {
+        e.preventDefault()
+    }
+C.  a.onclick = function(e) {
+        e.preventDefault()
+     }
+D. A B C 都可以~
+
+ - => 经测试只有 onclick 可以    
+
+## IE浏览器中 attachEvent 方式的事件绑定
+> attachEvent的this总是Window。
+```
+el.attachEvent('onclick', function(){
+    alert(this);
+});
+```
+
+## HTTP状态码
+- 400 Bad Request
+由于明显的客户端错误（例如，格式错误的请求语法，太大的大小，无效的请求消息或欺骗性路由请求），服务器不能或不会处理该请求。[31]
+- 401 Unauthorized（RFC 7235）
+参见：HTTP基本认证、HTTP摘要认证
+类似于403 Forbidden，401语义即“未认证”，即用户没有必要的凭据。[32]该状态码表示当前请求需要用户验证。
+
+注意：当网站（通常是网站域名）禁止IP地址时，有些网站状态码显示的401，表示该特定地址被拒绝访问网站。
+- 402 Payment Required
+该状态码是为了将来可能的需求而预留的。该状态码最初的意图可能被用作某种形式的数字现金或在线支付方案的一部分，但几乎没有哪家服务商使用，而且这个状态码通常不被使用。如果特定开发人员已超过请求的每日限制，Google Developers API会使用此状态码。[34]
+- 403 Forbidden
+服务器已经理解请求，但是拒绝执行它。与401响应不同的是，身份验证并不能提供任何帮助，而且这个请求也不应该被重复提交。如果这不是一个HEAD请求，而且服务器希望能够讲清楚为何请求不能被执行，那么就应该在实体内描述拒绝的原因。当然服务器也可以返回一个404响应，假如它不希望让客户端获得任何信息。
+
+## 选择正确答案(构造函数的引用地址)
+```
+var str = 'asd;  
+var str2 = new String(str)  var str1 = new String(str)
+console.log(str1 == str2 , str1 === str2)
+```
+A. true  true
+B. true false
+C. false true
+D. false false
+
+//  => 输出 => false false
+
+> 因为 new 出来的俩个字符串引用地址不同
+
+##  下面的输出结果 (this 指向问题)
+```
+    function one () { 
+        this.name = 1;
+        return function two () {
+                name = 2;
+            return function three() {
+                var name = 3;
+                console.log(this.name);
+            }
+        }
+    }
+    one()()()  // => 2;
+```
+
+> 还有一部分题忘掉喽 ~ 还有一些题具体的记不太清了，稍作修改，考点计本差不多，上面答案有的是我自己写的，有的是我 google 整理出来的，笔试期间摄像头坏了，而且不小心弹出去了三四次~就当练习了吧，反正简历也没准备好呢，哦，对了，考点大多都在高程中有详细讲解，需要好好看一下高程，面试应该会问一些 Node 和 ES6吧，如果有错误或者更好的方法请告诉我 
+
+更多笔试整理更新在[个人博客](http://hexin.life/2017/08/01/title-22/)和[Github](https://github.com/18292843691/FE-interview)，欢迎小伙伴来一起准备秋招(求大腿抱)。
+
+
 # 基础知识
 
 ## 使用 typeof 能得到哪些基础类型
@@ -24,6 +508,98 @@ if(obj.a == nul)  // => 等同于  obj.a === null || obj.a === undefined
 ```
 
 - 其他情况全部用 ===
+
+## 继承示例
+示例一:
+```
+function GetArray(arr) {
+    if(Array.isArray(arr)) {
+        this.arr = arr
+    } else if (typeof arr === 'string'){
+        this.arr = arr.split('')
+    } else {
+        this.arr = [arr]
+    }
+}
+
+GetArray.prototype.copy = function(newArr) {
+    return this.arr = newArr.slice()
+}
+
+// 输入 
+GetArray.prototype.delete = function(num, index, val) {
+    if(val) {
+        return this.arr.splice(findIndex((val)=> {
+            return val === val
+        }), num || 1)
+    } else {
+        return this.arr.splice(index, num || 1)
+    }
+}
+
+var arr1 = [1,2,3,4]
+var arr2 = []
+var arr = new GetArray(arr1)
+
+arr.copy(arr2)
+arr.delete(1, 0)
+```
+
+示例二: 
+```
+function Person (name, age) {
+    this.name = name || 'just people'
+    this.age = age || 'forwver'
+}
+
+Person.prototype.skill = function(val) {
+    console.log('i can ' + val)
+}
+
+function Man (name, age, sex) {
+    this.name = this.name
+    this.age = this.age
+    this.sex = 'man'
+}
+
+Person.prototype.love = function(name) {
+    if(name) {
+        console.log(this.name + ' love ' + name)
+    } else {
+        console.log(this.name + 'love self')
+    }
+}
+
+function Men (name, age, sex) {
+    this.name = name || this.name
+    this.age = age || this.age
+    this.sex = 'men'
+}
+
+Man.prototype = new Person()
+
+Men.prototype = new Person()
+
+function Boy (name, age, sex) {
+    this.name = name
+    this.age = age
+    this.sex = this.sex
+}
+
+Boy.prototype = new Man('man')
+
+function Girl (name, age, sex) {
+    this.name = name
+    this.age = age
+    this.sex = this.sex
+}
+
+Girl.prototype = new Men('girl')
+
+var hx = new Boy('hx', 22)
+var xbk = new Girl('xbk', 20)
+var h = new Man('fh',0)
+```
 
 ##window.onload 和 DOMContentLoaded 的区别
 
@@ -547,12 +1123,12 @@ console.log(formatDate)
 
 然后是自定义拖动大小, 利用 CSS3 的 resize ，再增加 overflow 属性
 ```css
-    margin: 50px;
-    padding-left: 3px;
-    width: 100px;
-    border: 1px solid #ccc;
-    resize: both;
-    overflow: hidden;
+	margin: 50px;
+	padding-left: 3px;
+	width: 100px;
+	border: 1px solid #ccc;
+	resize: both;
+	overflow: hidden;
 ```
 
 ![测试图片](http://or3233yyd.bkt.clouddn.com//17-8-1/97830271.jpg)
@@ -628,46 +1204,46 @@ sub2.css
   - [target=_blank]: 选择 target="_blank" 的所有元素。
   - [title~=flower]: 选择 title 属性包含单词 "flower" 的所有元素。
   - [lang|=en]: 选择 lang 属性值以 "en" 开头的所有元素。
-  - :link   (a:link)    选择所有未被访问的链接。    1
+  - :link	(a:link)	选择所有未被访问的链接。	1
 
-选择器       例子           例子描述             CSS
-- :visited  (a:visited) 选择所有已被访问的链接。    1
-- :active   (a:active)  选择活动链接。 1
-- :hover    (a:hover)   选择鼠标指针位于其上的链接。  1
-- :focus    (input:focus)   选择获得焦点的 input 元素。   2
-- :first-letter (p:first-letter)    选择每个 p 元素的首字母。  1
-- :first-line   (p:first-line)  选择每个 p 元素的首行。   1
-- :first-child  (p:first-child) 选择属于父元素的第一个子元素的每个 p 元素。 2
-- :before   (p:before)  在每个 p 元素的内容之前插入内容。  2
-- :after    (p:after)   在每个 p 元素的内容之后插入内容。  2
+选择器	      例子	       例子描述          	CSS
+- :visited	(a:visited)	选择所有已被访问的链接。	1
+- :active	(a:active)	选择活动链接。	1
+- :hover	(a:hover)	选择鼠标指针位于其上的链接。	1
+- :focus	(input:focus)	选择获得焦点的 input 元素。	2
+- :first-letter	(p:first-letter)	选择每个 p 元素的首字母。	1
+- :first-line	(p:first-line)	选择每个 p 元素的首行。	1
+- :first-child	(p:first-child)	选择属于父元素的第一个子元素的每个 p 元素。	2
+- :before	(p:before)	在每个 p 元素的内容之前插入内容。	2
+- :after	(p:after)	在每个 p 元素的内容之后插入内容。	2
 
 等等等等....查看手册吧~太多了，记住常用的就行了，其他的用到了再查吧。
 #### CSS 伪类(觉得这个挺重要的-列举的有点多)
-- :first-of-type    (p:first-of-type)   选择属于其父元素的首个 p 元素的每个 p 元素。   3
-- :last-of-type (p:last-of-type)    选择属于其父元素的最后 p 元素的每个 p 元素。   3
-- :only-of-type (p:only-of-type)    选择属于其父元素唯一的 p 元素的每个 p 元素。   3
-- :only-child   (p:only-child)  选择属于其父元素的唯一子元素的每个 p 元素。 3
-- :nth-child(n) (p:nth-child(2))    选择属于其父元素的第二个子元素的每个 p 元素。    3
-- :nth-last-child(n)    (p:nth-last-child(2))   同上，从最后一个子元素开始计数。    3
-- :nth-of-type(n)   (p:nth-of-type(2))  选择属于其父元素第二个 p 元素的每个 p 元素。   3
-- :nth-last-of-type(n)  (p:nth-last-of-type(2)) 同上，但是从最后一个子元素开始计数。  3
-- :last-child   (p:last-child)  选择属于其父元素最后一个子元素每个 p 元素。 3
-- :last-child   p:last-child    选择属于其父元素最后一个子元素每个 p 元素。 3
-- :active   向被激活的元素添加样式。    1
-- :focus    向拥有键盘输入焦点的元素添加样式。   2
-- :hover    当鼠标悬浮在元素上方时，向元素添加样式。    1
-- :link 向未被访问的链接添加样式。   1
-- :visited  向已被访问的链接添加样式。   1
-- :first-child  向元素的第一个子元素添加样式。 2
-- :lang 向带有指定 lang 属性的元素添加样式。   2
-- :root :root   选择文档的根元素。   3
-- :empty    ( p:empty ) 选择没有子元素的每个 p 元素（包括文本节点）。    3
-- :target   ( #news:target )    选择当前活动的 #news 元素。   3
-- :enabled  ( input:enabled )   选择每个启用的 input 元素。   3
-- :disabled ( input:disabled )  选择每个禁用的 input 元素    3
-- :checked  ( input:checked )   选择每个被选中的 input 元素。  3
-- :not(selector)    ( :not(p) ) 选择非 p 元素的每个元素。  3
-- ::selection   ( ::selection ) 选择被用户选取的元素部分。   3
+- :first-of-type	(p:first-of-type)	选择属于其父元素的首个 p 元素的每个 p 元素。	3
+- :last-of-type	(p:last-of-type)	选择属于其父元素的最后 p 元素的每个 p 元素。	3
+- :only-of-type	(p:only-of-type)	选择属于其父元素唯一的 p 元素的每个 p 元素。	3
+- :only-child	(p:only-child)	选择属于其父元素的唯一子元素的每个 p 元素。	3
+- :nth-child(n)	(p:nth-child(2))	选择属于其父元素的第二个子元素的每个 p 元素。	3
+- :nth-last-child(n)	(p:nth-last-child(2))	同上，从最后一个子元素开始计数。	3
+- :nth-of-type(n)	(p:nth-of-type(2))	选择属于其父元素第二个 p 元素的每个 p 元素。	3
+- :nth-last-of-type(n)	(p:nth-last-of-type(2))	同上，但是从最后一个子元素开始计数。	3
+- :last-child	(p:last-child)	选择属于其父元素最后一个子元素每个 p 元素。	3
+- :last-child	p:last-child	选择属于其父元素最后一个子元素每个 p 元素。	3
+- :active	向被激活的元素添加样式。	1
+- :focus	向拥有键盘输入焦点的元素添加样式。	2
+- :hover	当鼠标悬浮在元素上方时，向元素添加样式。	1
+- :link	向未被访问的链接添加样式。	1
+- :visited	向已被访问的链接添加样式。	1
+- :first-child	向元素的第一个子元素添加样式。	2
+- :lang	向带有指定 lang 属性的元素添加样式。	2
+- :root	:root	选择文档的根元素。	3
+- :empty	( p:empty )	选择没有子元素的每个 p 元素（包括文本节点）。	3
+- :target	( #news:target )	选择当前活动的 #news 元素。	3
+- :enabled	( input:enabled )	选择每个启用的 input 元素。	3
+- :disabled	( input:disabled )	选择每个禁用的 input 元素	3
+- :checked	( input:checked )	选择每个被选中的 input 元素。	3
+- :not(selector)	( :not(p) )	选择非 p 元素的每个元素。	3
+- ::selection	( ::selection )	选择被用户选取的元素部分。	3
  
 ##### 部分应用
 ###### :after伪类 
@@ -675,12 +1251,12 @@ sub2.css
 - 经典的[清除浮动](http://hexin.life/2017/07/29/title-22/) => :[after伪类+content 清除浮动的影响](http://www.zhangxinxu.com/wordpress/2010/09/after%E4%BC%AA%E7%B1%BBcontent%E5%86%85%E5%AE%B9%E7%94%9F%E6%88%90%E5%B8%B8%E8%A7%81%E5%BA%94%E7%94%A8%E4%B8%BE%E4%BE%8B/)
 ```
 .fix:after{
-    display:block; 
-    content:"clear"; 
-    height:0; 
-    clear:both; 
-    overflow:hidden; 
-    visibility:hidden;
+	display:block; 
+	content:"clear"; 
+	height:0; 
+	clear:both; 
+	overflow:hidden; 
+	visibility:hidden;
 }
 .fix{*zoom:1;}  /* IE */
 ```
@@ -689,23 +1265,23 @@ sub2.css
 
 ```
 .pic_box{
-    width:300px; 
-    height:300px; 
-    background-color:#beceeb; 
-    font-size:0; 
-    *font-size:200px; 
-    text-align:center;
-    }
+	width:300px; 
+	height:300px; 
+	background-color:#beceeb; 
+	font-size:0; 
+	*font-size:200px; 
+	text-align:center;
+	}
 .pic_box img{
-    vertical-align:middle;
+	vertical-align:middle;
 }
 .pic_box:after{
-    display:inline-block; 
-    width:0; 
-    height:100%; 
-    content:"center"; 
-    vertical-align:middle; 
-    overflow:hidden;
+	display:inline-block; 
+	width:0; 
+	height:100%; 
+	content:"center"; 
+	vertical-align:middle; 
+	overflow:hidden;
 }
 ```
 
@@ -717,7 +1293,7 @@ sub2.css
 
 ```css
 p::selection{
-    background-color: red;
+	background-color: red;
 }
 ```
 
@@ -820,7 +1396,7 @@ p::selection{
  - skew() 包含两个参数值skewX(< angle>), skewY(< angle>)，分别表示X轴和Y轴倾斜的角度，如果第二个参数为空，则默认为0，参数为负表示向相反方向倾斜
  - matrix() matrix 方法有六个参数，包含旋转，缩放，移动（平移）和倾斜功能。
 - CSS3 3D 转换
- - perspective(n)   => 定义 3D 转换元素的透视视图。
+ - perspective(n)	=> 定义 3D 转换元素的透视视图。
 - CSS3 过渡
  - transition => 简写属性，用于在一个属性中设置四个过渡属性。 => 3
  - transition-property => 规定应用过渡的 CSS 属性的名称。 => 3
@@ -842,21 +1418,21 @@ p::selection{
 
 
 - CSS3 图片
-       - [响应式图片](http://www.runoob.com/try/try.php?filename=trycss_ex_images_responsive) => max-width: 100%;
-       - 图片滤镜 => [css滤镜](http://www.runoob.com/cssref/css3-pr-filter.html)
-       - [响应式图片相册](http://www.runoob.com/try/try.php?filename=trycss_image_gallery_responsive) 
-       - [图片 Modal(模态)](http://www.runoob.com/try/try.php?filename=trycss_image_modal_js)
+	   - [响应式图片](http://www.runoob.com/try/try.php?filename=trycss_ex_images_responsive) => max-width: 100%;
+	   - 图片滤镜 => [css滤镜](http://www.runoob.com/cssref/css3-pr-filter.html)
+	   - [响应式图片相册](http://www.runoob.com/try/try.php?filename=trycss_image_gallery_responsive) 
+	   - [图片 Modal(模态)](http://www.runoob.com/try/try.php?filename=trycss_image_modal_js)
 - CSS3 按钮
-     -  [按钮动画](http://www.runoob.com/try/try.php?filename=trycss_buttons_animate1)
+	 -  [按钮动画](http://www.runoob.com/try/try.php?filename=trycss_buttons_animate1)
 - CSS3 分页
 - CSS3 框大小 =>  box-sizing 属性可以设置 width 和 height 属性中包含了 padding(内边距) 和 border(边框)。
-        - 关于 [border-box ](http://hexin.life/2017/07/11/title-15/) 
+	    - 关于 [border-box ](http://hexin.life/2017/07/11/title-15/) 
 - CSS3 [弹性盒子](http://www.ruanyifeng.com/blog/2015/07/flex-grammar.html)
 - [CSS3 多媒体查询](https://developer.mozilla.org/zh-CN/docs/Web/Guide/CSS/Media_queries)
-          - viewport(视窗) 的宽度与高度
-          - 设备的宽度与高度
-          - 朝向 (智能手机横屏，竖屏) 。
-          - 分辨率 
+		  - viewport(视窗) 的宽度与高度
+		  - 设备的宽度与高度
+		  - 朝向 (智能手机横屏，竖屏) 。
+		  - 分辨率 
 
 ## 垂直居中
 ### [大小不固定的图片、多行文字的水平垂直居中](http://www.zhangxinxu.com/wordpress/2009/08/%E5%A4%A7%E5%B0%8F%E4%B8%8D%E5%9B%BA%E5%AE%9A%E7%9A%84%E5%9B%BE%E7%89%87%E3%80%81%E5%A4%9A%E8%A1%8C%E6%96%87%E5%AD%97%E7%9A%84%E6%B0%B4%E5%B9%B3%E5%9E%82%E7%9B%B4%E5%B1%85%E4%B8%AD/)
@@ -1038,498 +1614,23 @@ body,html {
 # Node 
 
 # 功能类
+
 ## [实现联动](http://hexin.life/more/linkage.html)
 ## [放大镜](http://hexin.life/more/mangnifyLens.html)
 
 # 面试题整理
+
 - [前端面试题及答案汇总](https://github.com/ivonzhang/Front-End-Developer-Questions/wiki)
+- [前端开发面试题集锦](http://www.runoob.com/w3cnote/front-end-development.html)
 - [2017年前端面试题最新汇总](http://blog.csdn.net/xllily_11/article/details/70899191)
 - [30个你 “ 不可能全部会做 ” 的javascript题目及答案](http://developer.51cto.com/art/201504/474298.htm)
-- [Node interview of ElemeFE](https://elemefe.github.io/node-interview/#/)
 - [百度糯米前端技术学院](http://ife.baidu.com/college/detail/id/8)
 - [newcode 牛客网](https://www.nowcoder.com/contestRoom)
 - [lint-code](http://www.lintcode.com/zh-cn/problem/)
+- [百度 FEX 的面试过程](https://github.com/fex-team/interview-questions)
+- [Node interview of 饿了么](https://elemefe.github.io/node-interview/#/)
+- [Front-end-Developer-Interview-Questions](https://github.com/h5bp/Front-end-Developer-Interview-Questions)
+- [一些个面试题与js知识点](https://github.com/5Mi/wumi_blog/issues/69)
+- [面试题](https://segmentfault.com/bookmark/1230000009049633)
 
 > 知识整理及总结多来于网络及他人博客，由于时间原因，不能每一个知识点都完整的整理出来，因此附带了参考/学习链接。也等于一个知识点的梳理。
-
-# 简答题：
-## settimeout 与 setInterval的区别， 及对他们的内存的分析
-### 区别
-1. setTimeout是在一段时间后调用指定函数（仅一次）
-2. setInterval是每隔一段时间调用指定函数（N次）
-```
-function run(){
-    // 其他代码
-    setTimeout(function(){
-        run();
-    }, 10000);
-}
-run();
-```
-以上面的代码来说, 虽然设置的是10s执行一次, 但是实际时间却是需要// 其他代码的执行时间来确定
-即setTimeout的间隔时间是, // setTimeout 的间隔时间 === 最小时间是(10s+)
-
-
-```
-setInterval(function(){
-    run();
-}, 10000);
-```
-而setInterval, 不会有上面的问题, 但是如果run()的执行时间, 操作大于10s, 那么甚至可能跳过任务;
-
-[setInterval 和 setTimeout 会产生内存溢出](http://www.pjhome.net/article/Javascript/822.html)
-[JavaScript setInterval()方法是否导致内存泄漏？](https://gxnotes.com/article/65338.html)
-
-## 关于内存泄漏
-### 内存
-程序的运行需要内存。只要程序提出要求，操作系统或者运行时（runtime）就必须供给内存。
-对于持续运行的服务进程（daemon），必须及时释放不再用到的内存。否则，内存占用越来越高，轻则影响系统性能，重则导致进程崩溃。
-不再用到的内存，没有及时释放，就叫做内存泄漏（memory leak）。
-（比如 C 语言）必须手动释放内存，程序员负责内存管理。
-```
-char * buffer;
-buffer = (char*) malloc(42);
-
-//...
-
-free(buffer)    //手动释放内存
-```
-
-> 上面是 C 语言代码，malloc方法用来申请内存，使用完毕之后，必须自己用free方法释放内存。
-这很麻烦，所以大多数语言提供自动内存管理，减轻程序员的负担，这被称为"垃圾回收机制"（garbage collector）。
-
-### 垃圾回收机制
-怎么知道哪些内存不再需要呢？常用的方法是 '引用计数', 语言的引擎有一张 '引用表', 保存了内存里面所有的资源(通常是各种值)的引用次数，当一个值的引用次数为 0 时，表示这个值用不到了，因此可将其释放。
-
-但是如果一个值不再用到了，引用次数却不为 0 ，垃圾回收机制却无法释放这块内存，从而导致内存泄漏。
-```
-const arr = [1, 2, 3, 4];
-console.log(arr);
-```
-
-打印完 arr 之后, arr 便用不到了，引用次数为 1, 但是它还会继续占用内存。
-```
-const arr = [1, 2, 3, 4];
-console.log(arr);
-arr = null;
-```
-
-arr 重置为 null，就解除了对 [1, 2, 3, 4] 的引用，引用次数变成了 0 ，内存就可以释放了。
-
-### JavaScript 内存管理
-JavaScript 是一种垃圾回收语言。垃圾回收语言通过周期性地检查先前分配的内存是否可达，帮助开发者管理内存。换言之，垃圾回收语言减轻了“内存仍可用”及“内存仍可达”的问题。两者的区别是微妙而重要的：仅有开发者了解哪些内存在将来仍会使用，而不可达内存通过算法确定和标记，适时被操作系统回收。
-
-### JavaScript 内存泄漏
-
-垃圾回收语言的内存泄漏主因是不需要的引用。理解它之前，还需了解垃圾回收语言如何辨别内存的可达与不可达。
-
-**Mark-and-sweep**
-1. 大部分垃圾回收语言用的算法称之为 Mark-and-sweep 。算法由以下几步组成：
-垃圾回收器创建了一个“roots”列表。Roots 通常是代码中全局变量的引用。JavaScript 中，“window” 对象是一个全局变量，被当作 root 。window 对象总是存在，因此垃圾回收器可以检查它和它的所有子对象是否存在（即不是垃圾）；
-2. 所有的 roots 被检查和标记为激活（即不是垃圾）。所有的子对象也被递归地检查。从 root 开始的所有对象如果是可达的，它就不被当作垃圾。
-3. 所有未被标记的内存会被当做垃圾，收集器现在可以释放内存，归还给操作系统了。
-
-现代的垃圾回收器改良了算法，但是本质是相同的：可达内存被标记，其余的被当作垃圾回收。
-
-不需要的引用是指开发者明知内存引用不再需要，却由于某些原因，它仍被留在激活的 root 树中。在 JavaScript 中，不需要的引用是保留在代码中的变量，它不再需要，却指向一块本该被释放的内存。有些人认为这是开发者的错误。
-
-为了理解 JavaScript 中最常见的内存泄漏，我们需要了解哪种方式的引用容易被遗忘。
-
-#### 常见 JavaScript 内存泄漏
-##### 意外的全局变量
-JavaScript 处理未定义变量的方式比较宽松：未定义的变量会在全局对象创建一个新变量。在浏览器中，全局对象是 window 。
-```
-function foo(arg) {
-    bar = "this is a hidden global variable";
-}
-```
-真相是：
-```
-function foo(arg) {
-    window.bar = "this is an explicit global variable";
-}
-```
-
-函数 foo 内部忘记使用 var ，意外创建了一个全局变量。此例泄漏了一个简单的字符串，无伤大雅，但是有更糟的情况。
-
-另一种意外的全局变量可能由 this 创建：
-```
-function foo() {
-    this.variable = "potential accidental global";
-}
-// Foo 调用自己，this 指向了全局对象（window）
-// 而不是 undefined
-foo();
-```
-> 在 JavaScript 文件头部加上 'use strict'，可以避免此类错误发生。启用严格模式解析 JavaScript ，避免意外的全局变量。
-
-全局变量注意事项:
-尽管我们讨论了一些意外的全局变量，但是仍有一些明确的全局变量产生的垃圾。它们被定义为不可回收（除非定义为空或重新分配）。尤其当全局变量用于临时存储和处理大量信息时，需要多加小心。如果必须使用全局变量存储大量数据时，确保用完以后把它设置为 null 或者重新定义。与全局变量相关的增加内存消耗的一个主因是缓存。缓存数据是为了重用，缓存必须有一个大小上限才有用。高内存消耗导致缓存突破上限，因为缓存内容无法被回收。
-
-##### 被遗忘的计时器或回调函数
-在 JavaScript 中使用 setInterval 非常平常。一段常见的代码：
-```
-var someResource = getData();
-setInterval(function() {
-    var node = document.getElementById('Node');
-    if(node) {
-        // 处理 node 和 someResource
-        node.innerHTML = JSON.stringify(someResource));
-    }
-}, 1000);
-```
-
-此例说明了什么：与节点或数据关联的计时器不再需要，*node* 对象可以删除，整个回调函数也不需要了。可是，计时器回调函数仍然没被回收（计时器停止才会被回收）。同时，*someResource* 如果存储了大量的数据，也是无法被回收的。
-
-对于观察者的例子，一旦它们不再需要（或者关联的对象变成不可达），明确地移除它们非常重要。老的 IE 6 是无法处理循环引用的。如今，即使没有明确移除它们，一旦观察者对象变成不可达，大部分浏览器是可以回收观察者处理函数的。
-
-观察者代码示例：
-```
-var element = document.getElementById('button');
-function onClick(event) {
-    element.innerHTML = 'text';
-}
-element.addEventListener('click', onClick);   // => 循环调用
-```
-
-**对象观察者和循环引用注意事项**
-老版本的 IE 是无法检测 DOM 节点与 JavaScript 代码之间的循环引用，会导致内存泄漏。如今，现代的浏览器（包括 IE 和 Microsoft Edge）使用了更先进的垃圾回收算法，已经可以正确检测和处理循环引用了。换言之，回收节点内存时，不必非要调用 removeEventListener 了。
-
-##### 脱离 DOM 的引用
-有时，保存 DOM 节点内部数据结构很有用。假如你想快速更新表格的几行内容，把每一行 DOM 存成字典（JSON 键值对）或者数组很有意义。此时，同样的 DOM 元素存在两个引用：一个在 DOM 树中，另一个在字典中。将来你决定删除这些行时，需要把两个引用都清除.
-```
-var elements = {
-    button: document.getElementById('button'),
-    image: document.getElementById('image'),
-    text: document.getElementById('text')
-};
-function doStuff() {
-    image.src = 'http://some.url/image';
-    button.click();
-    console.log(text.innerHTML);
-    // 更多逻辑
-}
-function removeButton() {
-    // 按钮是 body 的后代元素
-    document.body.removeChild(document.getElementById('button'));
-    // 此时，仍旧存在一个全局的 #button 的引用
-    // elements 字典。button 元素仍旧在内存中，不能被 GC 回收。
-}
-```
-此外还要考虑 DOM 树内部或子节点的引用问题。假如你的 JavaScript 代码中保存了表格某一个 \<td> 的引用。将来决定删除整个表格的时候，直觉认为 GC 会回收除了已保存的 \<td> 以外的其它节点。实际情况并非如此：此 \<td> 是表格的子节点，子元素与父元素是引用关系。由于代码保留了 \<td> 的引用，导致整个表格仍待在内存中。保存 DOM 元素引用的时候，要小心谨慎。
-
-##### 闭包
-> 如果闭包的作用域中保存着一个 HTML 元素，则该元素无法被销毁。(下面代码来自高程)
-
-闭包是 JavaScript 开发的一个关键方面：匿名函数可以访问父级作用域的变量。
-```
-function assgin() {
-    var ele = document.getElementById('someEle');
-    ele.onclick = function(){
-        alert(ele.id);
-    }
-}
-```
-
-以上代码创建了一个作为 ele 元素事件处理程序的闭包，而这个闭包有创建了一个循环的引用，由于匿名函数保存了一个 assgin() 的活动对象的引用 ，因此无法减少对 ele 的引用次数 , 只要匿名函数存在，ele的引用次数至少是 1。我们可以稍微改写一下:
-``` 
-function assgin() {
-    var ele = document.getElementById('someEle');
-    var id = ele.id
-    ele.onclick = function(){
-        alert(id);
-    }
-    ele = null;
-}
-```
-
-上面代码中，通过把 ele.id 的一个副本保存在一个变量中，并且在比保重引用该变量消除了循环引用，但是这样还不能解决内存泄露，*闭包会引用包含函数的整个活动对象*，而其中包含着 ele ，即使闭包不直接引用 ele ，包含函数的活动对象中也会保存 一个引用，因此需要把 ele 变量设置为 null ,这样就解除了对 DOM 对象的引用，减少其引用数，确保能正常回收。
-
-关于内存的发现 chrome 的使用~暂时没有使用过，看不太明白，就不 copy 了。
-
-[js闭包测试](http://www.cnblogs.com/rubylouvre/p/3345294.html) => 看不懂~
-
-### 上述内容 copy 自下面二者：
-
-[JavaScript 内存泄漏教程-阮一峰](http://www.ruanyifeng.com/blog/2017/04/memory-leak.html)
-[4类 JavaScript 内存泄漏及如何避免](https://jinlong.github.io/2016/05/01/4-Types-of-Memory-Leaks-in-JavaScript-and-How-to-Get-Rid-Of-Them/)
-## ajax 原生实现
-```
-var xhr = createXHR()
-xhr.onreadystatechange = function() {
-    if(xhr.readyState == 4) {
-        if(xhr.status == 200) {
-            console.log(xhr.responeText)
-            //do sth...
-        } else {
-            console.log('request fail' + xhr.status)
-        }
-    }
-};
-xhr.open('get', 'hello.com', true)
-xhr.send(null);
-```
-
-## 闭包的理解
-闭包是指有权访问另一个函数作用域中的变量的函数。
-这个口述我还是不知道怎么说，或许是应用不够~看了无数文章到头来敌不过忘记~也可能我理解的还是不到位吧~个人不解释了，放参考链接吧
-[How do JavaScript closures work?--StackOverflow](https://stackoverflow.com/questions/111102/how-do-javascript-closures-work)
-[学习Javascript闭包（Closure）--阮一峰的网络日志](http://www.ruanyifeng.com/blog/2009/08/learning_javascript_closures.html)
-[JS 中的闭包是什么--方应杭](https://zhuanlan.zhihu.com/p/22486908)
-[JavaScript 中 闭包 的详解](https://github.com/lin-xin/blog/issues/8)
-[闭包--MDN](https://developer.mozilla.org/cn/docs/Web/JavaScript/Closures)
-[闭包的应用](http://hexin.life/2017/04/15/title-7/)
-## [html中一段文本内容 hdslakd*dnska8das ，将文本中含有数组['d', 'a', '*', '8'] 中的内容标记为红色文本(字符串有改动)](http://hexin.life/more/pdd.html)
-### 设定 html 结构
-```
-    <style>
-        .mark {
-            color: red;
-        }
-    </style>
-    
-<html>
-    <body>
-        <div class='textToMark'>
-        hdslakddnska8das
-        </div>
-    </body>
-</html>
-```
-
-### 方法一:循环
-```
-    const textToMark = document.querySelector('.textToMark');
-    
-    const text = textToMark.innerHTML;
-
-    const arr = ['d', 'a', '*', '8'];
-
-    const newText = text.split('');
-
-    function toMark (textArr, arr) {
-        for(let i = 0; i < newText.length; i++) {
-            for(let j = 0; j < arr.length; j++) {
-                if(newText[i] == arr[j]) {
-                    newText[i] = `<span class='mark'>${newText[i]}</span>`;
-                }
-            }
-        }
-        return newText;
-    }
-    toMark(newText, arr);
-    textToMark.innerHTML = newText.join('');
-```
-
-### 方法二: 字符串的 replace
-```
-    const textToMark = document.querySelector('.textToMark');
-    
-    const text = textToMark.innerHTML;
-
-    const reg = /[da\*8]+/g;
-
-    var newtext = text.replace(reg, (match) => {
-        return match = `<span class='mark'>${match}</span>`;
-    });
-    
-    textToMark.innerHTML = newtext;
-```
-
-> 代码为个人写出，如果有更好的办法欢迎指教
-
-## [原生JS创建这样的 dom 结构 < div id='hello'> < p class='textToMark'>hdslakddnska8das< p>< /div>](http://hexin.life/more/pdd.html)
-```
-function createElement() {
-        var body = document.body;
-    
-        var fragment = document.createDocumentFragment()      
-
-        var div = document.createElement('div')
-        div.setAttribute('id', 'hello')
-
-        fragment.appendChild(div)
-
-        var p = document.createElement('p')
-        p.className = 'textToMark'
-        p.innerHTML = 'hdslakddnska8das'
-
-        div.appendChild(p);
-        body.appendChild(fragment)
-    }
-    createElement();
-```
-
-感谢评论指出，已改正，关于节点创建 createElement 的效率问题，如果**当插入的节点很多**的时候，createElement 的效率会不如 createDocumentFragment .
-createElement 每次 append 一个节点的时候，都会导致页面的重排，例如:
-
-数据为这样:
-```
-<ul id="myList">
-    <li>
-        <a href="www.baidu.com"></a>
-    </li>
-    <li>
-        <a href="www.helloworld.com"></a>
-    </li>
-</ul>
-
-
-var data = [
-    { name: '36O秋招', url: 'http://campus.360.cn/2015/grad.html'},
-    { name: 'TX校招', url: 'http://join.qq.com/index.php'}
-]
-
-```
-```
-function appendChildToElement(appendToElement, data) {
-    var a, li;
-    for (var i = 0, len = data.length; i < len; i++) {
-        a = document.createElement('a');
-        a.href = data[i].url;
-        a.appChild(document.createTextNode(data[i].name))
-        li = document.createElement('li');
-        li.appendChild(a);
-        appendChildToElement(li);
-    }
-}
-```
-
-这种情况下，data 内的每一个对象插入到 DOM 结构的时候都会触发一次重排，因此效率会较低。
-但是我们可以改变他的 display 属性，临时从文档移除 ul ，即可有效减少重排次数。
-
-```
-var ul = document.getElementById('myList');
-ur.style.display = 'none';
-appendChildToElement(ul, data);
-ul.style.display = 'block';
-```
-
-当然，更好的办法就是利用 createDocumentFragment 来创建一个文档片段.
-```
-var fragment = document.createElementFragment();
-appendChildToElement(fragment, data);
-document.getElementById('myList').appendChild(fragment);
-```
-只访问了一次 DOM 节点，只触发了一次重排;再次感谢 @xaclincoln 的指出。
-
-查了一些关于 createDocumentFragment 和 createElement 比较的文章。
-- [createDocumentFragment or createElement--StackOverflow](https://stackoverflow.com/questions/3397161/should-i-use-document-createdocumentfragment-or-document-createelement) 
-- [createElement vs createDocumentFragment](https://jsperf.com/createelement-vs-createdocumentfragment)
-- [createElement 与 createDocumentFragment 的点点区别](http://www.cnblogs.com/xesam/archive/2011/12/19/2293876.html)
-- [CreateDocumentFragment 的用处](http://www.cnitblog.com/asfman/articles/32614.html)
-
-## [创建一个函数对 JS 基础类型 ( function, boolean, array, number, string, object) 进行值复制](http://hexin.life/more/pdd.html)
-```
-    function valueToCopy (valueBeCopy) {
-        var copyValue;
-        if (typeof (+valueBeCopy) === 'number' && typeof valueBeCopy !== 'object') {
-            copyValue = +valueBeCopy;
-        } else if (typeof valueBeCopy === 'string') {
-            copyValue = parseInt(copyValue);
-        } else if (typeof valueBeCopy === 'object'){
-            if(Array.isArray(valueBeCopy)) {
-                copyValue = valueBeCopy.slice();
-            }
-            copyValue = JSON.parse(JSON.stringify(valueBeCopy))
-        } 
-            copyValue = valueBeCopy;
-        // console.log(copyValue)
-        return copyValue;   
-    }
-```
-
-![test img](http://or3233yyd.bkt.clouddn.com//17-8-2/50845409.jpg)
-
-## url 输入到页面完成经历了什么
-感觉这篇文章非常非常详细了~太长了，过段时间再整理(抄袭~)
-[老生常谈-从输入url到页面展示到底发生了什么](http://www.kuqin.com/shuoit/20170324/353413.html)
-# [选择题](http://hexin.life/more/pdd.html)
-## 执行顺序
-```
-var input = document.getElementById('cls')
-
-input.onmouseup = function() {
-    console.log('onmouseup')
-}
-input.onmousedown = function() {
-    console.log('onmousedown')
-}
-input.onclick = function() {
-    console.log('onclick')
-}
-input.onfocus = function() {
-    console.log('onfocus')
-}
-```
-
-> onmousedown => onfocus => onmouseup => onclick
-
-## [a 链接默认事件的阻止](http://hexin.life/more/pdd.html)
-> A. a.onmouseup = function(e) {
-        e.preventDefault()
-    }
-B.  a.onmousedown = function(e) {
-        e.preventDefault()
-    }
-C.  a.onclick = function(e) {
-        e.preventDefault()
-     }
-D. A B C 都可以~
-
- - => 经测试只有 onclick 可以    
-
-## IE浏览器中 attachEvent 方式的事件绑定
-> attachEvent的this总是Window。
-```
-el.attachEvent('onclick', function(){
-    alert(this);
-});
-```
-
-## HTTP状态码
-- 400 Bad Request
-由于明显的客户端错误（例如，格式错误的请求语法，太大的大小，无效的请求消息或欺骗性路由请求），服务器不能或不会处理该请求。[31]
-- 401 Unauthorized（RFC 7235）
-参见：HTTP基本认证、HTTP摘要认证
-类似于403 Forbidden，401语义即“未认证”，即用户没有必要的凭据。[32]该状态码表示当前请求需要用户验证。
-
-注意：当网站（通常是网站域名）禁止IP地址时，有些网站状态码显示的401，表示该特定地址被拒绝访问网站。
-- 402 Payment Required
-该状态码是为了将来可能的需求而预留的。该状态码最初的意图可能被用作某种形式的数字现金或在线支付方案的一部分，但几乎没有哪家服务商使用，而且这个状态码通常不被使用。如果特定开发人员已超过请求的每日限制，Google Developers API会使用此状态码。[34]
-- 403 Forbidden
-服务器已经理解请求，但是拒绝执行它。与401响应不同的是，身份验证并不能提供任何帮助，而且这个请求也不应该被重复提交。如果这不是一个HEAD请求，而且服务器希望能够讲清楚为何请求不能被执行，那么就应该在实体内描述拒绝的原因。当然服务器也可以返回一个404响应，假如它不希望让客户端获得任何信息。
-
-## 选择正确答案(构造函数的引用地址)
-```
-var str = 'asd;  
-var str2 = new String(str)  var str1 = new String(str)
-console.log(str1 == str2 , str1 === str2)
-```
-A. true  true
-B. true false
-C. false true
-D. false false
-
-//  => 输出 => false false
-
-> 因为 new 出来的俩个字符串引用地址不同
-
-##  下面的输出结果 (this 指向问题)
-```
-    function one () { 
-        this.name = 1;
-        return function two () {
-                name = 2;
-            return function three() {
-                var name = 3;
-                console.log(this.name);
-            }
-        }
-    }
-    one()()()  // => 2;
-```
-
-> 还有一部分题忘掉喽 ~ 还有一些题具体的记不太清了，稍作修改，考点计本差不多，上面答案有的是我自己写的，有的是我 google 整理出来的，笔试期间摄像头坏了，而且不小心弹出去了三四次~就当练习了吧，反正简历也没准备好呢，哦，对了，考点大多都在高程中有详细讲解，需要好好看一下高程，面试应该会问一些 Node 和 ES6吧，如果有错误或者更好的方法请告诉我 
-
-更多笔试整理更新在[个人博客](http://hexin.life/2017/08/01/title-22/)和[Github](https://github.com/18292843691/FE-interview)，欢迎小伙伴来一起准备秋招(求大腿抱)。
